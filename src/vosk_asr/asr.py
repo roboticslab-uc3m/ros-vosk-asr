@@ -4,64 +4,59 @@ import rospy
 import sounddevice as sd
 
 from std_msgs.msg import String
+from std_srvs.srv import SetBool
+
 from vosk import Model, KaldiRecognizer
 
+DEFAULT_MODEL = 'small-es-0.42'
+
 class VoskSpeechRecognitionResponder:
-    def __init__(self, stream, model):
+    def __init__(self, stream):
         self.stream = stream
+
         device_info = sd.query_devices(None, 'input') # queries default sound device
         # soundfile expects an int, sounddevice provides a float:
         self.sample_rate = int(device_info['default_samplerate'])
 
-        if not self._setDictionaryInternal(model, None):
-            raise Exception('Unable to load dictionary')
+        model = rospy.get_param('~model', DEFAULT_MODEL)
 
-    def _setDictionaryInternal(self, dictionary, language):
         try:
-            if dictionary is not None and str(dictionary):
-                print('Setting dictionary to %s' % dictionary)
-                self.model = Model(model_name='vosk-model-' + dictionary)
-            elif language is not None and str(language):
-                print('Setting language to %s' % language)
-                self.model = Model(lang=language)
-            else:
-                print('No dictionary or language specified')
-                return False
+            rospy.loginfo('setting dictionary to %s' % model)
+            self.model = Model(model_name='vosk-model-' + model)
         except SystemExit:
-            print('Dictionary or language not available')
-            return False
+            rospy.logfatal('dictionary or language not available')
 
         self.rec = KaldiRecognizer(self.model, self.sample_rate)
-        return True
+        self.pub = rospy.Publisher('echo_transcription', String, queue_size=10)
+        self.srv = rospy.Service('mute_microphone', SetBool, self._handle_microphone)
 
     def transcribe(self, frame):
         if self.rec.AcceptWaveform(frame):
-            return (False, json.loads(self.rec.Result())['text'])
+            is_partial, transcription = False, json.loads(self.rec.Result())['text']
         else:
-            return (True, json.loads(self.rec.PartialResult())['partial'])
+            is_partial, transcription = True, json.loads(self.rec.PartialResult())['partial']
 
-    def muteMicrophone(self):
-        print('Muting microphone')
-        self.stream.abort()
-        return True
+        if transcription:
+            if not is_partial:
+                rospy.loginfo('result: %s' % transcription)
+                self.pub.publish(transcription)
+            else:
+                rospy.loginfo('partial: %s' % transcription)
 
-    def unmuteMicrophone(self):
-        print('Unmuting microphone')
-        self.stream.start()
-        return True
+    def _handle_microphone(self, req):
+        if req.data:
+            rospy.loginfo('muting microphone')
+            self.stream.abort()
+            ret = 'muted'
+        else:
+            rospy.loginfo('unmuting microphone')
+            self.stream.start()
+            ret = 'unmuted'
 
-def int_or_str(text):
-    """Helper function for argument parsing."""
-    try:
-        return int(text)
-    except ValueError:
-        return text
+        return (True, ret)
 
 def main():
-    rospy.init_node('vosk_asr', anonymous=False, disable_signals=True)
-
-    pub = rospy.Publisher('transcription', String, queue_size=10)
-    model = rospy.get_param('~model', 'small-es-0.42')
+    rospy.init_node('asr', anonymous=False, disable_signals=True)
 
     q = queue.Queue()
 
@@ -69,18 +64,10 @@ def main():
                             dtype='int16',
                             channels=1,
                             callback=lambda indata, frames, time, status: q.put(bytes(indata))) as stream:
-        responder = VoskSpeechRecognitionResponder(stream, model)
+        responder = VoskSpeechRecognitionResponder(stream)
 
         while True:
-            frame = q.get()
-            isPartial, transcription = responder.transcribe(frame)
-
-            if transcription:
-                if not isPartial:
-                    rospy.loginfo('result: %s' % transcription)
-                    pub.publish(transcription)
-                else:
-                    rospy.loginfo('partial: %s' % transcription)
+            responder.transcribe(q.get())
 
 if __name__ == '__main__':
     try:
