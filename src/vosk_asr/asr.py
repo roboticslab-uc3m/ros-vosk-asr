@@ -4,7 +4,7 @@ import rospy
 import sounddevice as sd
 
 from std_msgs.msg import String
-from std_srvs.srv import SetBool
+from std_srvs.srv import Trigger
 
 from vosk import Model, KaldiRecognizer
 
@@ -28,7 +28,8 @@ class VoskSpeechRecognitionResponder:
 
         self.rec = KaldiRecognizer(self.model, self.sample_rate)
         self.pub = rospy.Publisher('echo_transcription', String, queue_size=10)
-        self.srv = rospy.Service('mute_microphone', SetBool, self._handle_microphone)
+        self.srv_mute = rospy.Service('mute_microphone', Trigger, self._mute_microphone)
+        self.srv_unmute = rospy.Service('unmute_microphone', Trigger, self._unmute_microphone)
 
     def transcribe(self, frame):
         if self.rec.AcceptWaveform(frame):
@@ -43,17 +44,15 @@ class VoskSpeechRecognitionResponder:
             else:
                 rospy.loginfo('partial: %s' % transcription)
 
-    def _handle_microphone(self, req):
-        if req.data:
-            rospy.loginfo('muting microphone')
-            self.stream.abort()
-            ret = 'muted'
-        else:
-            rospy.loginfo('unmuting microphone')
-            self.stream.start()
-            ret = 'unmuted'
+    def _mute_microphone(self, req):
+        rospy.loginfo('muting microphone')
+        self.stream.abort()
+        return (True, 'muted')
 
-        return (True, ret)
+    def _unmute_microphone(self, req):
+        rospy.loginfo('unmuting microphone')
+        self.stream.start()
+        return (True, 'muted')
 
 def main():
     rospy.init_node('asr', anonymous=False, disable_signals=True)
