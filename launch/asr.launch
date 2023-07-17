@@ -1,0 +1,6 @@
+<launch>
+    <arg name="model" />
+    <node name="asr" pkg="vosk_asr" type="asr" output="screen">
+        <param name="model" value="$(arg model)" />
+    </node>
+</launch>

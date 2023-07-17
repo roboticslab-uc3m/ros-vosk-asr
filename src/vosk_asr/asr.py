@@ -8,13 +8,15 @@ from std_srvs.srv import Trigger
 
 from vosk import Model, KaldiRecognizer
 
+# inspired by https://github.com/alphacep/vosk-api/blob/12f29a3/python/example/test_microphone.py
+
 DEFAULT_MODEL = 'small-es-0.42'
 
 class VoskSpeechRecognitionResponder:
-    def __init__(self, stream):
+    def __init__(self, device, stream):
         self.stream = stream
 
-        device_info = sd.query_devices(None, 'input') # queries default sound device
+        device_info = sd.query_devices(device, 'input') # queries default sound device
         # soundfile expects an int, sounddevice provides a float:
         self.sample_rate = int(device_info['default_samplerate'])
 
@@ -23,11 +25,12 @@ class VoskSpeechRecognitionResponder:
         try:
             rospy.loginfo('setting dictionary to %s' % model)
             self.model = Model(model_name='vosk-model-' + model)
-        except SystemExit:
+        except SystemExit as e:
             rospy.logfatal('dictionary or language not available')
+            raise e
 
         self.rec = KaldiRecognizer(self.model, self.sample_rate)
-        self.pub = rospy.Publisher('echo_transcription', String, queue_size=10)
+        self.pub = rospy.Publisher('transcription', String, queue_size=10)
         self.srv_mute = rospy.Service('mute_microphone', Trigger, self._mute_microphone)
         self.srv_unmute = rospy.Service('unmute_microphone', Trigger, self._unmute_microphone)
 
@@ -58,12 +61,14 @@ def main():
     rospy.init_node('asr', anonymous=False, disable_signals=True)
 
     q = queue.Queue()
+    device = rospy.get_param('~device', None)
 
     with sd.RawInputStream(blocksize=8000,
-                            dtype='int16',
-                            channels=1,
-                            callback=lambda indata, frames, time, status: q.put(bytes(indata))) as stream:
-        responder = VoskSpeechRecognitionResponder(stream)
+                           device=device,
+                           dtype='int16',
+                           channels=1,
+                           callback=lambda indata, frames, time, status: q.put(bytes(indata))) as stream:
+        responder = VoskSpeechRecognitionResponder(device, stream)
 
         while True:
             responder.transcribe(q.get())

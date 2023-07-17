@@ -16,3 +16,7 @@ install(FILES
         launch/small-en-us.launch
         launch/small-es.launch
         DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
+
+# this project layout and configuration is based on:
+# https://www.artificialhumancompanions.com/structure-python-based-ros-package/
+# https://github.com/SimonBirrell/simontest
