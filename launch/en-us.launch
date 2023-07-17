@@ -1,0 +1,5 @@
+<launch>
+    <node name="asr_en_us" pkg="vosk_asr" type="asr" output="screen">
+        <param name="model" value="en-us-0.42-gigaspeech" />
+    </node>
+</launch>

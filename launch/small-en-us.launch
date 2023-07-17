@@ -1,0 +1,5 @@
+<launch>
+    <node name="asr_small_en_us" pkg="vosk_asr" type="asr" output="screen">
+        <param name="model" value="small-en-us-0.4" />
+    </node>
+</launch>
