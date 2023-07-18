@@ -11,6 +11,7 @@ install(PROGRAMS nodes/asr
         DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
 install(FILES
+        launch/asr.launch
         launch/en-us.launch
         launch/es.launch
         launch/small-en-us.launch
