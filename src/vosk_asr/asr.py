@@ -4,13 +4,14 @@ import rospy
 import sounddevice as sd
 
 from std_msgs.msg import String
-from std_srvs.srv import Trigger
+from std_srvs.srv import Trigger, TriggerResponse
 
 from vosk import Model, KaldiRecognizer
 
 # inspired by https://github.com/alphacep/vosk-api/blob/12f29a3/python/example/test_microphone.py
 
 DEFAULT_MODEL = 'small-es-0.42'
+
 
 class VoskSpeechRecognitionResponder:
     def __init__(self, device, stream):
@@ -30,23 +31,35 @@ class VoskSpeechRecognitionResponder:
             raise e
 
         self.rec = KaldiRecognizer(self.model, self.sample_rate)
-        self.pub = rospy.Publisher('transcription', String, queue_size=10)
+        self.pub = rospy.Publisher('transcription', String, queue_size=1)
+        self.srv_speech = rospy.Service('voskSpeechSrv', Trigger, self._vosk_speech_srv)
         self.srv_mute = rospy.Service('mute_microphone', Trigger, self._mute_microphone)
         self.srv_unmute = rospy.Service('unmute_microphone', Trigger, self._unmute_microphone)
+        self.transcription = ' '
+        self.transcription_srv = ' '
 
     def transcribe(self, frame):
         if self.rec.AcceptWaveform(frame):
-            is_partial, transcription = False, json.loads(self.rec.Result())['text']
+            is_partial, self.transcription = False, json.loads(self.rec.Result())['text']
         else:
-            is_partial, transcription = True, json.loads(self.rec.PartialResult())['partial']
+            is_partial, self.transcription = True, json.loads(self.rec.PartialResult())['partial']
 
-        if transcription:
+        if self.transcription:
             if not is_partial:
-                rospy.loginfo('result: %s' % transcription)
-                self.pub.publish(transcription)
+                rospy.loginfo('result: %s' % self.transcription)
+                self.pub.publish(self.transcription)
+                self.transcription_srv = self.transcription
+                rospy.loginfo('result srv: %s' % self.transcription_srv)
             else:
-                rospy.loginfo('partial: %s' % transcription)
+                rospy.loginfo('partial: %s' % self.transcription)
 
+    def _vosk_speech_srv(self, req):
+        rospy.loginfo('Vosk speech service')
+        response = TriggerResponse()
+        response.success = True
+        response.message = self.transcription_srv
+        return response
+    
     def _mute_microphone(self, req):
         rospy.loginfo('muting microphone')
         self.stream.abort()
