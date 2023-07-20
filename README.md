@@ -27,3 +27,4 @@ Topics:
 Services:
 - `/mute_microphone` (`std_srvs/Trigger`)
 - `/unmute_microphone` (`std_srvs/Trigger`)
+- `/voskSpeechSrv` (`std_srvs/Trigger`)
